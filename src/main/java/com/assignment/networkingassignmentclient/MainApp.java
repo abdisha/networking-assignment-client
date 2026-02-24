@@ -1,22 +1,24 @@
 package com.assignment.networkingassignmentclient;
 
-import com.assignment.networkingassignmentclient.networking.TcpClient;
+import com.assignment.networkingassignmentclient.call.VideoEngine;
+import com.github.sarxos.webcam.Webcam;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+
+import java.io.*;
 import java.net.Socket;
 import java.util.List;
 import java.util.stream.Stream;
@@ -29,6 +31,9 @@ public class MainApp extends Application implements ClientListener {
     private String currentClient;
     private final Label selectedUser = new Label();
     private final Button callBtn = new Button();
+
+    private VideoEngine videoEngine = new VideoEngine(7000);
+    private boolean isCalling = false;
 
     @Override
     public void start(Stage primaryStage) {
@@ -114,7 +119,59 @@ public class MainApp extends Application implements ClientListener {
         }).start();
     }
 
-    @Override public void onMessageReceived(String message) {} // Handled in thread
+    @Override
+    public void onMessageReceived(String message) {
+        Platform.runLater(() -> {
+            if (message.startsWith("VIDEO_PROMPT:")) {
+                String callerIp = message.split(":")[1];
+                showCallAlert(callerIp);
+            } else if (message.startsWith("VIDEO_RESULT:")) {
+                String[] parts = message.split(":");
+                if (parts[2].equals("ACCEPT")) {
+                    startVideoCall(parts[1]); // parts[1] is the other person's IP
+                }
+            }
+
+        });
+    }
+    private void showCallAlert(String callerIp) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "Inbound call from " + callerIp, ButtonType.YES, ButtonType.NO);
+        alert.showAndWait().ifPresent(response -> {
+            String status = (response == ButtonType.YES) ? "ACCEPT" : "REJECT";
+            out.println("VIDEO_RESPONSE:" + callerIp + ":" + status);
+            if (status.equals("ACCEPT")) startVideoCall(callerIp);
+        });
+    }
+    // Inside ClientApp.java
+    private void startCall(String partnerIp) {
+        this.currentPartnerIp = partnerIp;
+        this.isCalling = true;
+        videoEngine.startReceiving((data, len) -> {
+            Image img = new Image(new ByteArrayInputStream(data, 0, len));
+            Platform.runLater(() -> remoteVideo.setImage(img));
+        });
+
+        new Thread(() -> {
+            Webcam webcam = Webcam.getDefault();
+            webcam.setViewSize(new Dimension(320, 240));
+            webcam.open();
+            while (isCalling) {
+                try {
+                    byte[] data = videoEngine.compress(webcam.getImage(), 0.3f);
+                    videoEngine.send(data, partnerIp);
+                    Thread.sleep(50);
+                } catch (Exception e) { break; }
+            }
+            webcam.close();
+        }).start();
+    }
+
+    private void stopCall() {
+        isCalling = false;
+        videoEngine.close();
+        Platform.runLater(() -> remoteVideo.setImage(null));
+    }
+
     @Override public void onStatusUpdate(String status) {}
     @Override public void stop() throws Exception { if (socket != null) socket.close(); super.stop(); }
 }
