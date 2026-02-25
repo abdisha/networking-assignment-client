@@ -10,66 +10,56 @@ import java.io.*;
 import java.util.Iterator;
 
 public class VideoEngine {
-    private DatagramSocket udpSocket;
+    private DatagramSocket socket;
     private int port;
-    private volatile boolean running;
+    private boolean running;
 
-    public VideoEngine(int port) {
-        this.port = port;
-    }
+    public VideoEngine(int port) { this.port = port; }
 
-    // COMPRESSION LOGIC: Converts BufferedImage to a small JPEG byte array
-    public byte[] compressFrame(BufferedImage image, float quality) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
-        ImageWriter writer = writers.next();
+    public void send(byte[] data, String ip) {
+        // If we've called close(), stop trying to send immediately
+        if (!running || socket == null || socket.isClosed()) return;
 
-        ImageWriteParam param = writer.getDefaultWriteParam();
-        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-        param.setCompressionQuality(quality); // 0.1 to 1.0 (0.3 is good for speed)
-
-        writer.setOutput(ImageIO.createImageOutputStream(baos));
-        writer.write(null, new IIOImage(image, null, null), param);
-        writer.dispose();
-
-        return baos.toByteArray();
-    }
-
-    public void sendPacket(byte[] data, String targetIP) {
         try {
-            // Remove any leading slashes from IP string
-            String cleanIP = targetIP.split(":")[0].replace("/", "");
-            InetAddress address = InetAddress.getByName(cleanIP);
-            DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
-            udpSocket.send(packet);
-        } catch (IOException e) {
-            System.err.println("UDP Send Error: " + e.getMessage());
+            String cleanIp = ip.split(":")[0].replace("/", "");
+            InetAddress addr = InetAddress.getByName(cleanIp);
+            socket.send(new DatagramPacket(data, data.length, addr, port));
+        } catch (Exception e) {
+            // Log error only if we haven't intentionally closed the socket
+            if (running) System.err.println("UDP Send Error: " + e.getMessage());
         }
     }
 
-    public void startReceiving(VideoFrameListener listener) {
+    public void startReceiving(VideoListener l) {
         running = true;
         new Thread(() -> {
             try {
-                if (udpSocket == null || udpSocket.isClosed()) {
-                    udpSocket = new DatagramSocket(port);
-                }
-                byte[] buffer = new byte[65507]; // Max UDP size
+                socket = new DatagramSocket(port);
+                byte[] buffer = new byte[65507];
                 while (running) {
-                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    udpSocket.receive(packet);
-                    listener.onFrameReceived(packet.getData(), packet.getLength());
+                    DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+                    socket.receive(p);
+                    l.onFrame(p.getData(), p.getLength());
                 }
-            } catch (IOException e) {
-                if (running) e.printStackTrace();
-            }
+            } catch (Exception e) { }
         }).start();
     }
 
-    public void stop() {
-        running = false;
-        if (udpSocket != null) udpSocket.close();
+    public byte[] compress(BufferedImage img, float q) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
+        ImageWriter writer = writers.next();
+        ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(q);
+        writer.setOutput(ImageIO.createImageOutputStream(baos));
+        writer.write(null, new IIOImage(img, null, null), param);
+        writer.dispose();
+        return baos.toByteArray();
     }
+
+    public void close() { running = false; if (socket != null) socket.close(); }
+    public interface VideoListener { void onFrame(byte[] data, int len); }
 }
 
 interface VideoFrameListener {
