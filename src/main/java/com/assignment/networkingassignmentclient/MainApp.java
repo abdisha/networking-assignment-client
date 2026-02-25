@@ -43,7 +43,7 @@ public class MainApp extends Application {
     private final Label selectedUserLabel = new Label("No user selected");
     private final Button callBtn = new Button("Call");
     private final Button hangUpBtn = new Button("Hang Up");
-
+    String serverIpFromUser = "192.168.1.143";
     @Override
     public void start(Stage primaryStage) {
         // --- 1. UI Setup ---
@@ -111,7 +111,7 @@ public class MainApp extends Application {
     private void connect() {
         new Thread(() -> {
             try {
-                socket = new Socket("127.0.0.1", 65432);
+                socket = new Socket(serverIpFromUser, 65432);
                 out = new PrintWriter(socket.getOutputStream(), true);
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
@@ -182,6 +182,7 @@ public class MainApp extends Application {
         // Ensure the IP is clean (remove any potential leading slashes)
         final String cleanPartnerIp = partnerIp.replace("/", "");
         this.currentPartnerIp = cleanPartnerIp;
+        System.out.println("current partner ip"+currentPartnerIp);
         this.isCalling = true;
 
         // A. Start Receiver
@@ -189,7 +190,9 @@ public class MainApp extends Application {
             try {
                 Image img = new Image(new ByteArrayInputStream(data, 0, len));
                 Platform.runLater(() -> remoteVideoView.setImage(img));
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                System.err.println("Image Error: " + e.getMessage());
+            }
         });
 
         // B. Start Sender
@@ -211,7 +214,7 @@ public class MainApp extends Application {
                     Thread.sleep(50);
                 }
             } catch (Exception e) {
-                System.err.println("Webcam Thread Error: " + e.getMessage());
+                System.out.println("Webcam Thread Error: " + e.getMessage());
             } finally {
                 if (webcam.isOpen()) webcam.close();
             }
