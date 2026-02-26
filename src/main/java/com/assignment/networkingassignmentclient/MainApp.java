@@ -12,10 +12,12 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Pair;
 
 import java.awt.Dimension;
 import java.awt.image.BufferedImage;
@@ -43,10 +45,20 @@ public class MainApp extends Application {
     private final Label selectedUserLabel = new Label("No user selected");
     private final Button callBtn = new Button("Call");
     private final Button hangUpBtn = new Button("Hang Up");
-    String serverIpFromUser = "192.168.1.143";
+
     @Override
     public void start(Stage primaryStage) {
         // --- 1. UI Setup ---
+
+        Pair<String, String> details = promptForConnectionDetails();
+        if (details == null) {
+            Platform.exit();
+            return;
+        }
+
+        String serverIp = details.getKey();
+        String username = details.getValue();
+
         chatArea.setEditable(false);
         remoteVideoView.setFitWidth(320);
         remoteVideoView.setPreserveRatio(true);
@@ -101,20 +113,20 @@ public class MainApp extends Application {
         mainLayout.setPadding(new Insets(15));
 
         // --- 4. Initialization ---
-        connect();
+        connect(username,serverIp);
 
         primaryStage.setTitle("TCP/UDP Multimedia Client");
         primaryStage.setScene(new Scene(mainLayout, 950, 500));
         primaryStage.show();
     }
 
-    private void connect() {
+    private void connect(String username,String serverIpAddress) {
         new Thread(() -> {
             try {
-                socket = new Socket(serverIpFromUser, 65432);
+                socket = new Socket(serverIpAddress, 65432);
                 out = new PrintWriter(socket.getOutputStream(), true);
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
+                out.println("LOGIN:" + username);
                 // Identify ourselves to filter out our own name from the list
                 currentClientIdentifier = socket.getLocalAddress().toString().substring(1) + ":" + socket.getLocalPort();
 
@@ -132,6 +144,7 @@ public class MainApp extends Application {
 
     private void handleIncomingMessage(String msg) {
         Platform.runLater(() -> {
+            System.out.println(msg);
             if (msg.startsWith("USER_LIST:")) {
                 // Filter the list so we don't see ourselves
                 List<String> users = Stream.of(msg.substring(10).split(","))
@@ -235,6 +248,38 @@ public class MainApp extends Application {
             currentPartnerIp = null;
         });
     }
+    private Pair<String, String> promptForConnectionDetails() {
+        Dialog<Pair<String, String>> dialog = new Dialog<>();
+        dialog.setTitle("Login");
+
+        ButtonType loginButtonType = new ButtonType("Connect", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField ip = new TextField("192.168.1.143");
+        TextField username = new TextField("User" + (int)(Math.random()*100));
+
+        grid.add(new Label("Server IP:"), 0, 0);
+        grid.add(ip, 1, 0);
+        grid.add(new Label("Username:"), 0, 1);
+        grid.add(username, 1, 1);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == loginButtonType) {
+                return new Pair<>(ip.getText(), username.getText());
+            }
+            return null;
+        });
+
+        return dialog.showAndWait().orElse(null);
+    }
+
 
     @Override
     public void stop() throws Exception {
