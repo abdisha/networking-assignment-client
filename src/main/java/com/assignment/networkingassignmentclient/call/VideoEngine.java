@@ -13,7 +13,7 @@ public class VideoEngine {
     private DatagramSocket socket;
     private int port;
     private boolean running;
-///
+
     public VideoEngine(int port) { this.port = port; }
 
     public void send(byte[] data, String ip) {
@@ -62,6 +62,3 @@ public class VideoEngine {
     public interface VideoListener { void onFrame(byte[] data, int len); }
 }
 
-interface VideoFrameListener {
-    void onFrameReceived(byte[] data, int length);
-}

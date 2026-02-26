@@ -12,10 +12,12 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Pair;
 
 import java.awt.Dimension;
 import java.awt.image.BufferedImage;
@@ -25,17 +27,15 @@ import java.util.List;
 import java.util.stream.Stream;
 
 public class MainApp extends Application {
-    // Networking
     private Socket socket;
     private PrintWriter out;
     private String currentClientIdentifier;
     private final VideoEngine videoEngine = new VideoEngine(7000);
 
-    // Call State
+    private String currentUsername="";
     private String currentPartnerIp;
     private volatile boolean isCalling = false;
 
-    // UI Components
     private final ObservableList<String> onlineUsers = FXCollections.observableArrayList();
     private final TextArea chatArea = new TextArea();
     private final TextField inputField = new TextField();
@@ -43,10 +43,19 @@ public class MainApp extends Application {
     private final Label selectedUserLabel = new Label("No user selected");
     private final Button callBtn = new Button("Call");
     private final Button hangUpBtn = new Button("Hang Up");
-    String serverIpFromUser = "192.168.1.143";
+
     @Override
     public void start(Stage primaryStage) {
-        // --- 1. UI Setup ---
+
+        Pair<String, String> details = promptForConnectionDetails();
+        if (details == null) {
+            Platform.exit();
+            return;
+        }
+
+        String serverIp = details.getKey();
+        String username = details.getValue();
+        currentUsername = username;
         chatArea.setEditable(false);
         remoteVideoView.setFitWidth(320);
         remoteVideoView.setPreserveRatio(true);
@@ -74,6 +83,7 @@ public class MainApp extends Application {
         hangUpBtn.setOnAction(e -> {
             if (currentPartnerIp != null) {
                 out.println("VIDEO_HANGUP:" + currentPartnerIp);
+                chatArea.appendText("Hanging up...\n");
                 stopCall();
             }
         });
@@ -89,7 +99,6 @@ public class MainApp extends Application {
             inputField.clear();
         });
 
-        // --- 3. Layout ---
         VBox chatPane = new VBox(10, new Label("Messaging"), chatArea, inputField);
         VBox.setVgrow(chatArea, Priority.ALWAYS);
 
@@ -100,21 +109,20 @@ public class MainApp extends Application {
         HBox mainLayout = new HBox(15, new VBox(10, new Label("Online Users"), userListView), chatPane, videoPane);
         mainLayout.setPadding(new Insets(15));
 
-        // --- 4. Initialization ---
-        connect();
+        connect(username,serverIp);
 
         primaryStage.setTitle("TCP/UDP Multimedia Client");
         primaryStage.setScene(new Scene(mainLayout, 950, 500));
         primaryStage.show();
     }
 
-    private void connect() {
+    private void connect(String username,String serverIpAddress) {
         new Thread(() -> {
             try {
-                socket = new Socket(serverIpFromUser, 65432);
+                socket = new Socket(serverIpAddress, 65432);
                 out = new PrintWriter(socket.getOutputStream(), true);
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
+                out.println("LOGIN:" + username);
                 // Identify ourselves to filter out our own name from the list
                 currentClientIdentifier = socket.getLocalAddress().toString().substring(1) + ":" + socket.getLocalPort();
 
@@ -131,11 +139,13 @@ public class MainApp extends Application {
     }
 
     private void handleIncomingMessage(String msg) {
+        System.out.println("User: "+currentUsername+"Incoming Message: "+msg);
         Platform.runLater(() -> {
+            System.out.println(msg);
             if (msg.startsWith("USER_LIST:")) {
                 // Filter the list so we don't see ourselves
                 List<String> users = Stream.of(msg.substring(10).split(","))
-                        .filter(u -> !u.contains(currentClientIdentifier))
+                        .filter(u -> !u.contains(currentUsername))
                         .toList();
                 onlineUsers.setAll(users);
             }
@@ -222,9 +232,7 @@ public class MainApp extends Application {
     }
 
     private void stopCall() {
-        isCalling = false; // 1. Signal threads to stop looping
-
-        // 2. Give the webcam thread a tiny moment to finish its current loop
+        isCalling = false;
         new Thread(() -> {
             try { Thread.sleep(100); } catch (InterruptedException e) {}
             videoEngine.close(); // 3. Now safe to close the socket
@@ -235,6 +243,38 @@ public class MainApp extends Application {
             currentPartnerIp = null;
         });
     }
+    private Pair<String, String> promptForConnectionDetails() {
+        Dialog<Pair<String, String>> dialog = new Dialog<>();
+        dialog.setTitle("Login");
+
+        ButtonType loginButtonType = new ButtonType("Connect", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField ip = new TextField("192.168.1.3");
+        TextField username = new TextField("User" + (int)(Math.random()*100));
+
+        grid.add(new Label("Server IP:"), 0, 0);
+        grid.add(ip, 1, 0);
+        grid.add(new Label("Username:"), 0, 1);
+        grid.add(username, 1, 1);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == loginButtonType) {
+                return new Pair<>(ip.getText(), username.getText());
+            }
+            return null;
+        });
+
+        return dialog.showAndWait().orElse(null);
+    }
+
 
     @Override
     public void stop() throws Exception {
