@@ -51,8 +51,8 @@ jobs:
       run: |
         sudo apt-get install -y fakeroot
         jpackage --type deb --name "networking-chat-client" \
-        --input target/libs --main-jarnetworking-assignment-client-1.0-SNAPSHOT.jar \
-        --main-classcom.assignment.networkingassignmentclient.MainApp \
+        --input target/libs --main-jar networking-assignment-client-1.0-SNAPSHOT.jar \
+        --main-class com.assignment.networkingassignmentclient.MainApp \
         --linux-shortcut --dest dist/
 
 
