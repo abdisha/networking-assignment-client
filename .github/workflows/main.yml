@@ -42,7 +42,7 @@ jobs:
       run: |
         jpackage --type exe --name "NetworkingChat-client" `
         --input target/libs --main-jar networking-assignment-client-1.0-SNAPSHOT.jar `
-        --main-class com.assignment.networkingassignmentclient.MainApp `
+        --main-class com.assignment.networkingassignmentclient.Launcher `
         --win-shortcut --win-menu --dest dist/
 
     # --- UBUNTU BUILD (.deb) ---
@@ -52,7 +52,7 @@ jobs:
         sudo apt-get install -y fakeroot
         jpackage --type deb --name "networking-chat-client" \
         --input target/libs --main-jar networking-assignment-client-1.0-SNAPSHOT.jar \
-        --main-class com.assignment.networkingassignmentclient.MainApp \
+        --main-class com.assignment.networkingassignmentclient.Launcher \
         --linux-shortcut --dest dist/
 
 
