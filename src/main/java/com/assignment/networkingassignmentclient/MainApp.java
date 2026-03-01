@@ -292,6 +292,4 @@ public class MainApp extends Application {
         if (socket != null) socket.close();
         super.stop();
     }
-
-    public static void main(String[] args) { launch(args); }
 }
