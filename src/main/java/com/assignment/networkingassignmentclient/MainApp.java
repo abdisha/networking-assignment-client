@@ -208,7 +208,16 @@ public class MainApp extends Application {
         // B. Start Sender
         new Thread(() -> {
             Webcam webcam = Webcam.getDefault();
-            if (webcam == null) return;
+            if (webcam == null) {
+                Platform.runLater(() -> {
+                    Alert alert = new Alert(Alert.AlertType.ERROR, "No webcam found on this system.");
+                    alert.setTitle("Hardware Error");
+                    alert.setHeaderText(null);
+                    alert.showAndWait();
+                });
+                stopCall();
+                return;
+            }
 
             try {
                 webcam.setViewSize(new Dimension(320, 240));
@@ -243,6 +252,7 @@ public class MainApp extends Application {
             currentPartnerIp = null;
         });
     }
+
     private Pair<String, String> promptForConnectionDetails() {
         Dialog<Pair<String, String>> dialog = new Dialog<>();
         dialog.setTitle("Login");
